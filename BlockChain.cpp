@@ -7,6 +7,8 @@
 #include <chrono>
 #include <vector>
 #include <algorithm>
+#include <cstdint>
+
 
 using std::vector;
 using std::string;
@@ -14,13 +16,16 @@ using std::cout;
 using std::endl;
 using namespace std::chrono;
 
+string hashFunction(string s);
+
 class user{
-protected:
+private:
     string name;
     string public_key;
     int balance;
+
 public:
-    user(string defn = "", string defk = "", int defb = 0): name{defn}, public_key{defk}, balance{defb}{}
+    user(string defn = "", string defk = "", int defb = 0): name{defn}, public_key{defk}, balance{defb}{};
     void setName(string n) { name = n;}
 	void setKey(string k) { public_key = k;}
 	void setBalance(int b) { balance = b;}
@@ -30,6 +35,81 @@ public:
     void addBalance(int toAdd) {balance+=toAdd;}
     void subBalance(int toSub) {balance-=toSub;}
 };
+
+class transaction{
+public:
+    int id;
+    string fromHash, toHash;
+    double amount;
+    transaction(int defI, string defF, string defT, double defA): id(defI), fromHash(defF), toHash(defT), amount(defA){};
+};
+
+class block{
+private:
+    time_t timestamp;
+    float version = 1.0;
+    string thisHash;
+    string thisData;
+    int64_t nonce;
+    uint32_t thisIndex;
+    string calculateHash();
+public:
+    block(uint32_t index, const string &data) : thisIndex(index), thisData(data) {
+    nonce = -1;
+    timestamp = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    };
+    string previousHash;
+    Block(uint32_t indexIn, const string &dataIn);
+    string getHash() const { return thisHash;}
+    string getData() const { return thisData;}
+    void mineBlock(uint32_t difficulty);
+};
+
+string block::calculateHash(){
+    string toHash = "";
+    toHash += std::to_string(thisIndex);
+    toHash += std::to_string(timestamp);
+    toHash += thisData;
+    toHash += std::to_string(nonce);
+    toHash += previousHash;
+    return hashFunction(toHash);
+}
+
+void block::mineBlock(uint32_t difficulty) {
+    char diffLenght[difficulty + 1];
+
+    for (uint32_t i = 0; i < difficulty; ++i) {
+        diffLenght[i] = '0';
+    }
+    diffLenght[difficulty] = '\0';
+
+    string diffString(diffLenght);
+    do{
+        nonce++;
+        thisHash = calculateHash();
+    } while (thisHash.substr(0, difficulty) != diffString);
+
+    cout << "Block mined: " << thisHash << endl;
+}
+
+class chain{
+private:
+    uint32_t difficulty;
+    vector<block> thisChain;
+    block getLast() { return thisChain.back();}
+public:
+    chain(){
+    thisChain.push_back(block(0, "Root"));
+    difficulty = 3;
+    }
+    void addBlock(block newBlock);
+};
+
+void chain::addBlock(block newBlock) {
+    newBlock.previousHash = getLast().getHash();
+    newBlock.mineBlock(difficulty);
+    thisChain.push_back(newBlock);
+}
 
 uint64_t** convertDecimal(string s, int & n, int & sizeOfMessage){
     sizeOfMessage = s.size();
@@ -127,9 +207,36 @@ void createUsers(vector<user>& users, int n){
     }
 }
 
+void createTransaction(vector<transaction> &transactions, int n, vector<user>& users){
+    for(int i = 0; i < n; i++){
+        transaction temp = transaction(i, users[rand()%users.size()].getKey(), users[rand()%users.size()].getKey(), rand()%100+1);
+        transactions.push_back(temp);
+    }
+}
+
 int main()
 {
     vector<user> users;
     createUsers(users, 1000);
 
+    vector<transaction> transactions;
+    createTransaction(transactions, 1000, users);
+
+    chain bChain = chain();
+    string data;
+    int i = 0;
+    while(transactions.size() > 0){
+        data = "";
+        for(int j = 0; j < 100 & transactions.size() > 0; j++){
+        int selector = rand()%transactions.size();
+        data += std::to_string(transactions[selector].id) + ",";
+        data += transactions[selector].fromHash + ",";
+        data += transactions[selector].toHash + ",";
+        data += std::to_string(transactions[selector].amount) + ";";
+        transactions.erase (transactions.begin()+selector);
+        }
+        cout << "Mining block " << i+1 <<"..." << endl;
+        bChain.addBlock(block(i+1, "Block 1 Data"));
+        i++;
+    }
 }
