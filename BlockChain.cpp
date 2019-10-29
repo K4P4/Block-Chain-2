@@ -36,12 +36,14 @@ public:
     void subBalance(int toSub) {balance-=toSub;}
 };
 
+vector<user> users;
+
 class transaction{
 public:
-    int id;
+    string id;
     string fromHash, toHash;
     double amount;
-    transaction(int defI, string defF, string defT, double defA): id(defI), fromHash(defF), toHash(defT), amount(defA){};
+    transaction(string defI = "", string defF = "", string defT = "", double defA = 0): id(defI), fromHash(defF), toHash(defT), amount(defA){};
 };
 
 class block{
@@ -49,28 +51,31 @@ private:
     time_t timestamp;
     float version = 1.0;
     string thisHash;
-    string thisData;
+    vector<transaction> thisData;
     int64_t nonce;
     uint32_t thisIndex;
     string calculateHash();
 public:
-    block(uint32_t index, const string &data) : thisIndex(index), thisData(data) {
+    block(uint32_t index, const vector<transaction> &data) : thisIndex(index), thisData(data) {
     nonce = -1;
     timestamp = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     };
     string previousHash;
-    Block(uint32_t indexIn, const string &dataIn);
     string getHash() const { return thisHash;}
-    string getData() const { return thisData;}
+    vector <transaction> getData() const { return thisData;}
+    void removeTransaction(int i){ thisData.erase(thisData.begin()+i);}
     void mineBlock(uint32_t difficulty);
 };
 
 string block::calculateHash(){
-    string toHash = "";
+    string toHash = "00";
+    toHash += std::to_string(nonce);
     toHash += std::to_string(thisIndex);
     toHash += std::to_string(timestamp);
-    toHash += thisData;
-    toHash += std::to_string(nonce);
+    for(int i = 0; i < thisData.size(); i++)
+    {
+        toHash += thisData[i].id;
+    }
     toHash += previousHash;
     return hashFunction(toHash);
 }
@@ -99,14 +104,33 @@ private:
     block getLast() { return thisChain.back();}
 public:
     chain(){
-    thisChain.push_back(block(0, "Root"));
+    vector <transaction> temp;
+    transaction t = transaction("", "Root", "Root", 0);
+    temp.push_back(t);
+    thisChain.push_back(block(0, temp));
     difficulty = 1;
     }
     void addBlock(block newBlock);
-    void getData(int i){ cout << thisChain[i].getData();}
 };
 
 void chain::addBlock(block newBlock) {
+    for(int i = 0; i < newBlock.getData().size(); i++){
+        if(hashFunction(newBlock.getData()[i].toHash + newBlock.getData()[i].fromHash + std::to_string(newBlock.getData()[i].amount)) != newBlock.getData()[i].id){
+            newBlock.removeTransaction(i);
+            cout << "Removed transaction due to wrong transaction id" << endl;
+        }
+        else{
+            int k = 0;
+                while(newBlock.getData()[i].fromHash != users[k].getKey()){
+                    k++;
+                }
+            k--;
+        if(newBlock.getData()[i].amount > users[k].getBalance()){
+            cout << "Removed transaction due to insufficient sender funds, amount: " << newBlock.getData()[i].amount << endl;
+            newBlock.removeTransaction(i);
+            }
+        }
+    }
     newBlock.previousHash = getLast().getHash();
     newBlock.mineBlock(difficulty);
     thisChain.push_back(newBlock);
@@ -210,38 +234,32 @@ void createUsers(vector<user>& users, int n){
 
 void createTransaction(vector<transaction> &transactions, int n, vector<user>& users){
     for(int i = 0; i < n; i++){
-        transaction temp = transaction(i, users[rand()%users.size()].getKey(), users[rand()%users.size()].getKey(), rand()%100+1);
+        transaction temp = transaction("", users[rand()%users.size()].getKey(), users[rand()%users.size()].getKey(), rand()%1500+1);
+        temp.id = hashFunction(temp.toHash + temp.fromHash + std::to_string(temp.amount));
         transactions.push_back(temp);
     }
+    transactions[72].id = "fijgfdijf";
 }
 
 int main()
 {
-    vector<user> users;
+    srand (time(NULL));
     createUsers(users, 1000);
 
     vector<transaction> transactions;
     createTransaction(transactions, 1000, users);
 
     chain bChain = chain();
-    string data;
     int i = 0;
     while(transactions.size() > 0){
-        data = "";
+        vector<transaction> data;
         for(int j = 0; j < 100 & transactions.size() > 0; j++){
         int selector = rand()%transactions.size();
-        data += std::to_string(transactions[selector].id) + ",";
-        data += transactions[selector].fromHash + ",";
-        data += transactions[selector].toHash + ",";
-        data += std::to_string(transactions[selector].amount) + ";";
+        data.push_back(transactions[selector]);
         transactions.erase (transactions.begin()+selector);
         }
         cout << "Mining block " << i+1 <<"..." << endl;
         bChain.addBlock(block(i+1, data));
         i++;
-    }
-
-    for(int i = 0; i < 10; i++){
-            bChain.getData(i);
     }
 }
