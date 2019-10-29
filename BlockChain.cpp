@@ -100,9 +100,10 @@ private:
 public:
     chain(){
     thisChain.push_back(block(0, "Root"));
-    difficulty = 3;
+    difficulty = 1;
     }
     void addBlock(block newBlock);
+    void getData(int i){ cout << thisChain[i].getData();}
 };
 
 void chain::addBlock(block newBlock) {
@@ -236,7 +237,11 @@ int main()
         transactions.erase (transactions.begin()+selector);
         }
         cout << "Mining block " << i+1 <<"..." << endl;
-        bChain.addBlock(block(i+1, "Block 1 Data"));
+        bChain.addBlock(block(i+1, data));
         i++;
+    }
+
+    for(int i = 0; i < 10; i++){
+            bChain.getData(i);
     }
 }
