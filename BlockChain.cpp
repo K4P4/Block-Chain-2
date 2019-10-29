@@ -49,7 +49,7 @@ public:
 class block{
 private:
     time_t timestamp;
-    float version = 1.0;
+    float version = 1.5;
     string thisHash;
     vector<transaction> thisData;
     int64_t nonce;
@@ -64,7 +64,7 @@ public:
     string getHash() const { return thisHash;}
     vector <transaction> getData() const { return thisData;}
     void removeTransaction(int i){ thisData.erase(thisData.begin()+i);}
-    void mineBlock(uint32_t difficulty);
+    bool mineBlock(uint32_t difficulty);
 };
 
 string block::calculateHash(){
@@ -80,7 +80,7 @@ string block::calculateHash(){
     return hashFunction(toHash);
 }
 
-void block::mineBlock(uint32_t difficulty) {
+bool block::mineBlock(uint32_t difficulty) {
     char diffLenght[difficulty + 1];
 
     for (uint32_t i = 0; i < difficulty; ++i) {
@@ -91,17 +91,20 @@ void block::mineBlock(uint32_t difficulty) {
     string diffString(diffLenght);
     do{
         nonce++;
+        cout << "Mining attempt: " << nonce << endl;
         thisHash = calculateHash();
-    } while (thisHash.substr(0, difficulty) != diffString);
-
-    cout << "Block mined: " << thisHash << endl;
+    } while (thisHash.substr(0, difficulty) != diffString && nonce < 40);
+    if(nonce >= 40) return false;
+    else{
+        cout << "Block mined: " << thisHash << endl;
+        return true;
+    }
 }
 
 class chain{
 private:
     uint32_t difficulty;
     vector<block> thisChain;
-    block getLast() { return thisChain.back();}
 public:
     chain(){
     vector <transaction> temp;
@@ -110,29 +113,12 @@ public:
     thisChain.push_back(block(0, temp));
     difficulty = 1;
     }
+    block getLast() { return thisChain.back();}
+    int getDiff() { return difficulty;}
     void addBlock(block newBlock);
 };
 
 void chain::addBlock(block newBlock) {
-    for(int i = 0; i < newBlock.getData().size(); i++){
-        if(hashFunction(newBlock.getData()[i].toHash + newBlock.getData()[i].fromHash + std::to_string(newBlock.getData()[i].amount)) != newBlock.getData()[i].id){
-            newBlock.removeTransaction(i);
-            cout << "Removed transaction due to wrong transaction id" << endl;
-        }
-        else{
-            int k = 0;
-                while(newBlock.getData()[i].fromHash != users[k].getKey()){
-                    k++;
-                }
-            k--;
-        if(newBlock.getData()[i].amount > users[k].getBalance()){
-            cout << "Removed transaction due to insufficient sender funds, amount: " << newBlock.getData()[i].amount << endl;
-            newBlock.removeTransaction(i);
-            }
-        }
-    }
-    newBlock.previousHash = getLast().getHash();
-    newBlock.mineBlock(difficulty);
     thisChain.push_back(newBlock);
 }
 
@@ -238,7 +224,22 @@ void createTransaction(vector<transaction> &transactions, int n, vector<user>& u
         temp.id = hashFunction(temp.toHash + temp.fromHash + std::to_string(temp.amount));
         transactions.push_back(temp);
     }
-    transactions[72].id = "fijgfdijf";
+    for(int i = 0; i < 25; i++){
+            transactions[72+i].id = "fijgfdijygiuygf";
+    }
+}
+
+block CreateBlock(vector<transaction> tr, int id, chain bCh){
+    vector<transaction> transactions = tr;
+        vector<transaction> data;
+        for(int j = 0; j < 100 & transactions.size() > 0; j++){
+        int selector = rand()%transactions.size();
+        data.push_back(transactions[selector]);
+        transactions.erase (transactions.begin()+selector);
+        }
+        block newBlock = block(id, data);
+    newBlock.previousHash = bCh.getLast().getHash();
+    return newBlock;
 }
 
 int main()
@@ -250,16 +251,47 @@ int main()
     createTransaction(transactions, 1000, users);
 
     chain bChain = chain();
-    int i = 0;
     while(transactions.size() > 0){
-        vector<transaction> data;
-        for(int j = 0; j < 100 & transactions.size() > 0; j++){
-        int selector = rand()%transactions.size();
-        data.push_back(transactions[selector]);
-        transactions.erase (transactions.begin()+selector);
+        vector<block> Blocks;
+        for(int i = 0; i < 5; i++) Blocks.push_back(CreateBlock(transactions, i, bChain));
+
+        while(Blocks.size() > 0){
+                int curr = rand()%Blocks.size();
+            if(Blocks[curr].mineBlock(bChain.getDiff()) == true){
+                    for(int i = 0; i < Blocks[curr].getData().size(); i++){
+                    if(hashFunction(Blocks[curr].getData()[i].toHash + Blocks[curr].getData()[i].fromHash + std::to_string(Blocks[curr].getData()[i].amount)) != Blocks[curr].getData()[i].id){
+                    Blocks[curr].removeTransaction(i);
+                    transactions.erase(transactions.begin() + i);
+                    cout << "Removed transaction due to wrong transaction id" << endl;
+                    }
+                    else{
+                        int k = 0;
+                    while(Blocks[curr].getData()[i].fromHash != users[k].getKey()){
+                            k++;
+                        }
+                    k--;
+                    if(Blocks[curr].getData()[i].amount > users[k].getBalance()){
+                        cout << "Removed transaction due to insufficient sender funds, amount: " << Blocks[curr].getData()[i].amount << endl;
+                        Blocks[curr].removeTransaction(i);
+                        transactions.erase(transactions.begin() + i);
+                        }
+                    }
+                    }
+
+                    for(int j = 0; j < Blocks[curr].getData().size(); j++)
+                    {
+                        for(int k = 0; k < transactions.size(); k++){
+                            if(Blocks[curr].getData()[j].id == transactions[k].id){
+                                transactions.erase(transactions.begin() + k);
+                                k = transactions.size();
+                            }
+                        }
+                    }
+                bChain.addBlock(Blocks[curr]);
+                break;
+            }
+            else Blocks.erase(Blocks.begin() + curr);
         }
-        cout << "Mining block " << i+1 <<"..." << endl;
-        bChain.addBlock(block(i+1, data));
-        i++;
     }
+
 }
