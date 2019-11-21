@@ -49,38 +49,65 @@ public:
 class block{
 private:
     time_t timestamp;
-    float version = 1.5;
+    float version = 1.0;
     string thisHash;
     vector<transaction> thisData;
     int64_t nonce;
     uint32_t thisIndex;
+    string merkleTree;
     string calculateHash();
+    string merkleRoot(vector<string> hashList);
 public:
     block(uint32_t index, const vector<transaction> &data) : thisIndex(index), thisData(data) {
     nonce = -1;
     timestamp = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     };
     string previousHash;
+    string getMerkle() const { return merkleTree;}
     string getHash() const { return thisHash;}
     vector <transaction> getData() const { return thisData;}
     void removeTransaction(int i){ thisData.erase(thisData.begin()+i);}
-    bool mineBlock(uint32_t difficulty);
+    void mineBlock(uint32_t difficulty);
 };
+
+string block::merkleRoot(vector<string> hashList){
+    while(hashList.size() > 1){
+    vector<string> newList;
+
+    for(int i = 1; i < hashList.size(); i=i+2){
+        newList.push_back(hashFunction(hashList[i] + hashList[i-1]));
+    }
+    if(hashList.size()%2 > 0) newList.push_back(hashFunction(hashList[hashList.size()-1] + hashList[hashList.size()-1]));
+
+    hashList = newList;
+    newList.clear();
+    }
+    merkleTree = hashList[0];
+}
 
 string block::calculateHash(){
     string toHash = "00";
     toHash += std::to_string(nonce);
     toHash += std::to_string(thisIndex);
     toHash += std::to_string(timestamp);
-    for(int i = 0; i < thisData.size(); i++)
-    {
-        toHash += thisData[i].id;
-    }
     toHash += previousHash;
+    toHash += merkleTree;
     return hashFunction(toHash);
 }
 
-bool block::mineBlock(uint32_t difficulty) {
+void block::mineBlock(uint32_t difficulty) {
+    vector<string> hashList;
+    for(int i = 0; i < thisData.size(); i++)
+    {
+        string temp;
+        temp += thisData[i].fromHash;
+        temp += thisData[i].toHash;
+        temp += std::to_string(thisData[i].amount);
+        hashList.push_back(temp);
+    }
+    merkleRoot(hashList);
+    cout << getMerkle() << endl;
+
     char diffLenght[difficulty + 1];
 
     for (uint32_t i = 0; i < difficulty; ++i) {
@@ -91,20 +118,17 @@ bool block::mineBlock(uint32_t difficulty) {
     string diffString(diffLenght);
     do{
         nonce++;
-        cout << "Mining attempt: " << nonce << endl;
         thisHash = calculateHash();
-    } while (thisHash.substr(0, difficulty) != diffString && nonce < 40);
-    if(nonce >= 40) return false;
-    else{
-        cout << "Block mined: " << thisHash << endl;
-        return true;
-    }
+    } while (thisHash.substr(0, difficulty) != diffString);
+
+    cout << "Block mined: " << thisHash << endl;
 }
 
 class chain{
 private:
     uint32_t difficulty;
     vector<block> thisChain;
+    block getLast() { return thisChain.back();}
 public:
     chain(){
     vector <transaction> temp;
@@ -113,12 +137,29 @@ public:
     thisChain.push_back(block(0, temp));
     difficulty = 1;
     }
-    block getLast() { return thisChain.back();}
-    int getDiff() { return difficulty;}
     void addBlock(block newBlock);
 };
 
 void chain::addBlock(block newBlock) {
+    for(int i = 0; i < newBlock.getData().size(); i++){
+        if(hashFunction(newBlock.getData()[i].toHash + newBlock.getData()[i].fromHash + std::to_string(newBlock.getData()[i].amount)) != newBlock.getData()[i].id){
+            newBlock.removeTransaction(i);
+            cout << "Removed transaction due to wrong transaction id" << endl;
+        }
+        else{
+            int k = 0;
+                while(newBlock.getData()[i].fromHash != users[k].getKey()){
+                    k++;
+                }
+            k--;
+        if(newBlock.getData()[i].amount > users[k].getBalance()){
+            cout << "Removed transaction due to insufficient sender funds, amount: " << newBlock.getData()[i].amount << endl;
+            newBlock.removeTransaction(i);
+            }
+        }
+    }
+    newBlock.previousHash = getLast().getHash();
+    newBlock.mineBlock(difficulty);
     thisChain.push_back(newBlock);
 }
 
@@ -224,22 +265,7 @@ void createTransaction(vector<transaction> &transactions, int n, vector<user>& u
         temp.id = hashFunction(temp.toHash + temp.fromHash + std::to_string(temp.amount));
         transactions.push_back(temp);
     }
-    for(int i = 0; i < 25; i++){
-            transactions[72+i].id = "fijgfdijygiuygf";
-    }
-}
-
-block CreateBlock(vector<transaction> tr, int id, chain bCh){
-    vector<transaction> transactions = tr;
-        vector<transaction> data;
-        for(int j = 0; j < 100 & transactions.size() > 0; j++){
-        int selector = rand()%transactions.size();
-        data.push_back(transactions[selector]);
-        transactions.erase (transactions.begin()+selector);
-        }
-        block newBlock = block(id, data);
-    newBlock.previousHash = bCh.getLast().getHash();
-    return newBlock;
+    transactions[72].id = "fijgfdijf";
 }
 
 int main()
@@ -251,47 +277,16 @@ int main()
     createTransaction(transactions, 1000, users);
 
     chain bChain = chain();
+    int i = 0;
     while(transactions.size() > 0){
-        vector<block> Blocks;
-        for(int i = 0; i < 5; i++) Blocks.push_back(CreateBlock(transactions, i, bChain));
-
-        while(Blocks.size() > 0){
-                int curr = rand()%Blocks.size();
-            if(Blocks[curr].mineBlock(bChain.getDiff()) == true){
-                    for(int i = 0; i < Blocks[curr].getData().size(); i++){
-                    if(hashFunction(Blocks[curr].getData()[i].toHash + Blocks[curr].getData()[i].fromHash + std::to_string(Blocks[curr].getData()[i].amount)) != Blocks[curr].getData()[i].id){
-                    Blocks[curr].removeTransaction(i);
-                    transactions.erase(transactions.begin() + i);
-                    cout << "Removed transaction due to wrong transaction id" << endl;
-                    }
-                    else{
-                        int k = 0;
-                    while(Blocks[curr].getData()[i].fromHash != users[k].getKey()){
-                            k++;
-                        }
-                    k--;
-                    if(Blocks[curr].getData()[i].amount > users[k].getBalance()){
-                        cout << "Removed transaction due to insufficient sender funds, amount: " << Blocks[curr].getData()[i].amount << endl;
-                        Blocks[curr].removeTransaction(i);
-                        transactions.erase(transactions.begin() + i);
-                        }
-                    }
-                    }
-
-                    for(int j = 0; j < Blocks[curr].getData().size(); j++)
-                    {
-                        for(int k = 0; k < transactions.size(); k++){
-                            if(Blocks[curr].getData()[j].id == transactions[k].id){
-                                transactions.erase(transactions.begin() + k);
-                                k = transactions.size();
-                            }
-                        }
-                    }
-                bChain.addBlock(Blocks[curr]);
-                break;
-            }
-            else Blocks.erase(Blocks.begin() + curr);
+        vector<transaction> data;
+        for(int j = 0; j < 100 & transactions.size() > 0; j++){
+        int selector = rand()%transactions.size();
+        data.push_back(transactions[selector]);
+        transactions.erase (transactions.begin()+selector);
         }
+        cout << "Mining block " << i+1 <<"..." << endl;
+        bChain.addBlock(block(i+1, data));
+        i++;
     }
-
 }
